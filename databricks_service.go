@@ -2,21 +2,21 @@ package cbioportal_databricks_gateway
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 
 	dbsql "github.com/databricks/databricks-sql-go"
 )
 
 type DatabricksService struct {
-	tokenComment string
 	db           *sql.DB
 	schema       string
-	requestTable string
-	sampleTable  string
 }
 
-func NewDatabricksService(token, tokenComment, hostname, httpPath, schema, requestTable, sampleTable, slackURL string, port int) (*DatabricksService, func(), error) {
+func GetString() {
+	fmt.Println("HERE I AM")
+}
+
+func NewDatabricksService(token, hostname, httpPath, schema string, port int) (*DatabricksService, func(), error) {
 	db, err := openDatabase(token, hostname, httpPath, port)
 	if err != nil {
 		return nil, nil, err
@@ -24,51 +24,27 @@ func NewDatabricksService(token, tokenComment, hostname, httpPath, schema, reque
 	closeFunc := func() {
 		db.Close()
 	}
-	return &DatabricksService{tokenComment: tokenComment, db: db, schema: schema, requestTable: requestTable, sampleTable: sampleTable}, closeFunc, nil
+	return &DatabricksService{db: db, schema: schema}, closeFunc, nil
 }
 
-func (d *DatabricksService) GetRequest(igoRequestID string) (SmileRequest, error) {
-	var toReturn SmileRequest
-	if err := d.db.Ping(); err != nil {
-		errReturn := fmt.Errorf("Failed to connect to database request: '%s': %q", igoRequestID, err)
-		return toReturn, errReturn
-	}
-	query := fmt.Sprintf("select REQUEST_JSON from %s.%s where IGO_REQUEST_ID = '%s'", d.schema, d.requestTable, igoRequestID)
-	var rJSON sql.NullString
-	err := d.db.QueryRow(query).Scan(&rJSON)
-	if err != nil {
-		errReturn := fmt.Errorf("Failed to get request: '%s': %q", igoRequestID, err)
-		return toReturn, errReturn
-	}
-	if rJSON.Valid {
-		err = json.Unmarshal([]byte(rJSON.String), &toReturn)
-		if err != nil {
-			errReturn := fmt.Errorf("Failed to Unmarshal request: '%s': %q", igoRequestID, err)
-			return toReturn, errReturn
-		}
-	}
-	return toReturn, nil
+type ToReturnStruct struct {
+	patientId    string
+	cancerType   string
+	sampleId     string
 }
 
-func (d *DatabricksService) GetSample(igoRequestID, sampleName string) (SmileSample, error) {
-	var toReturn SmileSample
+func (d *DatabricksService) GetSample(sampleName string) (ToReturnStruct, error) {
+	var toReturn ToReturnStruct
 	if err := d.db.Ping(); err != nil {
-		errReturn := fmt.Errorf("Failed to connect to database request: '%s': %q", igoRequestID, err)
+		errReturn := fmt.Errorf("Failed to connect to database request: '%s': %q", sampleName, err)
 		return toReturn, errReturn
 	}
-	query := fmt.Sprintf("select SAMPLE_JSON from %s.%s where IGO_REQUEST_ID = '%s' and IGO_SAMPLE_NAME = '%s'", d.schema, d.sampleTable, igoRequestID, sampleName)
-	var sJSON sql.NullString
-	err := d.db.QueryRow(query).Scan(&sJSON)
+	query := fmt.Sprintf("select PATIENT_ID, CANCER_TYPE, SAMPLE_ID from %s.%s where SAMPLE_ID = '%s'", d.schema, "data_clinical_sample", sampleName)
+	fmt.Println(query)
+	err := d.db.QueryRow(query).Scan(&toReturn.patientId, &toReturn.cancerType, &toReturn.sampleId)
 	if err != nil {
-		errReturn := fmt.Errorf("Failed to get sample: '%s', request '%s': %q", sampleName, igoRequestID, err)
+		errReturn := fmt.Errorf("Failed to get sample: '%s', %q", sampleName, err)
 		return toReturn, errReturn
-	}
-	if sJSON.Valid {
-		err = json.Unmarshal([]byte(sJSON.String), &toReturn)
-		if err != nil {
-			errReturn := fmt.Errorf("Failed to unmarshal sample: '%s', request '%s': %q", sampleName, igoRequestID, err)
-			return toReturn, errReturn
-		}
 	}
 	return toReturn, nil
 }

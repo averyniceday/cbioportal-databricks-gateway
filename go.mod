@@ -3,11 +3,15 @@ module github.com/averyniceday/cbioportal-databricks-gateway
 go 1.22.0
 
 require (
+	github.com/databricks/databricks-sql-go v1.7.1
+	github.com/docopt/docopt-go v0.0.0-20180111231733-ee0de3bc6815
+)
+
+require (
 	github.com/andybalholm/brotli v1.0.4 // indirect
 	github.com/apache/arrow/go/v12 v12.0.1 // indirect
 	github.com/apache/thrift v0.17.0 // indirect
 	github.com/coreos/go-oidc/v3 v3.5.0 // indirect
-	github.com/databricks/databricks-sql-go v1.7.1 // indirect
 	github.com/dnephin/pflag v1.0.7 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/fsnotify/fsnotify v1.5.4 // indirect

@@ -6,6 +6,7 @@ import (
     "fmt"
     "os"
     "path/filepath"
+    "strings"
     dbsql "github.com/databricks/databricks-sql-go"
 )
 
@@ -63,6 +64,75 @@ func (d *DatabricksService) GetTableColumns(tableName string) ([]string, error) 
         columnNames = append(columnNames, colName)
     }
     return columnNames, nil
+}
+
+func (d *DatabricksService) WriteMetaData(tableName string, outDir string) error {
+    // Construct query with % in LIKE
+    query := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE data_filename LIKE '%s.%%'", d.catalog, d.schema, "metadata", tableName)
+    rows, err := d.db.Query(query)
+    if err != nil {
+        return fmt.Errorf("Failed to get data: '%s', %q", tableName, err)
+    }
+    defer rows.Close()
+
+    var (
+        studyId string
+        dataFile string
+        key string
+        value string
+        rowCount int
+        lines []string
+    )
+
+    // Process rows, but don’t write yet
+    for rows.Next() {
+        err := rows.Scan(&studyId, &dataFile, &key, &value)
+        if err != nil {
+            return fmt.Errorf("Failed to scan row: %q", err)
+        }
+
+        if rowCount == 0 {
+            lines = append(lines, fmt.Sprintf("cancer_study_identifier: %s", studyId))
+            lines = append(lines, fmt.Sprintf("data_filename: %s", dataFile))
+        }
+
+        lines = append(lines, fmt.Sprintf("%s: %s", key, value))
+        rowCount++
+    }
+
+    // If no rows, skip writing
+    if rowCount == 0 {
+        return nil
+    }
+
+    // Create the directory
+    err = os.MkdirAll(outDir, 0755)
+    if err != nil {
+        return fmt.Errorf("Error creating directory: %v", err)
+    }
+
+    // Get output path
+    metaFilename, ok := supportedFiletypes[tableName]
+    if !ok {
+        return fmt.Errorf("Unsupported table name: %s", tableName)
+    }
+    outFilePath := filepath.Join(outDir, strings.Replace(metaFilename, "data", "meta", 1))
+
+    // Write to file
+    file, err := os.Create(outFilePath)
+    if err != nil {
+        return fmt.Errorf("Failed to create file: '%s', %q", outFilePath, err)
+    }
+    defer file.Close()
+
+    for _, line := range lines {
+        _, err := fmt.Fprintln(file, line)
+        if err != nil {
+            return fmt.Errorf("Failed to write line to file: '%s', %q", outFilePath, err)
+        }
+    }
+
+    return nil
 }
 
 // reading and writing at same time will save on memory and be faster

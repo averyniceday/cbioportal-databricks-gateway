@@ -68,7 +68,7 @@ func (d *DatabricksService) GetTableColumns(tableName string) ([]string, error) 
 
 func (d *DatabricksService) WriteMetaData(tableName string, outDir string) error {
     // Construct query with % in LIKE
-    query := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE data_filename LIKE '%s.%%'", d.catalog, d.schema, "metadata", tableName)
+    query := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE data_filename LIKE '%s%%'", d.catalog, d.schema, "metadata", tableName)
     rows, err := d.db.Query(query)
     if err != nil {
         return fmt.Errorf("Failed to get data: '%s', %q", tableName, err)

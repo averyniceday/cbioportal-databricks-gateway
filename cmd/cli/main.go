@@ -53,6 +53,8 @@ func main() {
     for _, table := range tables {
         err = ds.WriteAllTableData(table, config.Directory)
         handleIfError(err, fmt.Sprintf("Error writing table data for '%s'", table))
+        err = ds.WriteMetaData(table, config.Directory)
+        handleIfError(err, fmt.Sprintf("Error writing metadata data for '%s'", table))
     }
     closeDB()
 }

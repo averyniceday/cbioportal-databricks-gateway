@@ -49,6 +49,8 @@ func main() {
     handleIfError(err, "Error connecting to the database")
 
     tables, err := ds.GetValidTablesInSchema()
+    fmt.Println(tables)
+
     handleIfError(err, "Error getting list of valid tables in schema")
     for _, table := range tables {
         err = ds.WriteAllTableData(table, config.Directory)

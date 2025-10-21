@@ -7,6 +7,7 @@ import (
     "os"
     "path/filepath"
     "strings"
+    "pandas"
     dbsql "github.com/databricks/databricks-sql-go"
 )
 
@@ -20,9 +21,33 @@ var supportedFiletypes = map[string]string {
     "data_mutations_extended": "data_mutations_extended.txt",
     "data_sv": "data_sv.txt",
     "data_clinical_patient": "data_clinical_patient.txt",
+    "data_clinical" : "data_clinical.txt",
     "data_clinical_sample": "data_clinical_sample.txt",
     "data_gene_matrix": "data_gene_matrix.txt",
     "data_timeline": "data_timeline.txt",
+    "data_timeline_bmi" : "data_timeline_bmi",
+    "data_timeline_ca_125_labs" : "data_timeline_ca_125_labs",
+    "data_timeline_ca_15_3_labs" : "data_timeline_ca_15_3_labs",
+    "data_timeline_ca_19_9_labs" : "data_timeline_ca_19_9_labs",
+    "data_timeline_cancer_presence" : "data_timeline_cancer_presence",
+    "data_timeline_cea_labs" : "data_timeline_cea_labs",
+    "data_timeline_diagnosis" : "data_timeline_diagnosis",
+    "data_timeline_ecog_kps" : "data_timeline_ecog_kps",
+    "data_timeline_follow_up" : "data_timeline_follow_up",
+    "data_timeline_gleason" : "data_timeline_gleason",
+    "data_timeline_mmr" : "data_timeline_mmr",
+    "data_timeline_pdl1" : "data_timeline_pdl1",
+    "data_timeline_prior_meds" : "data_timeline_prior_meds",
+    "data_timeline_progression" : "data_timeline_progression",
+    "data_timeline_psa_labs" : "data_timeline_psa_labs",
+    "data_timeline_radiation" : "data_timeline_radiation",
+    "data_timeline_specimen" : "data_timeline_specimen",
+    "data_timeline_specimen_surgery" : "data_timeline_specimen_surgery",
+    "data_timeline_surgery" : "data_timeline_surgery",
+    "data_timeline_treatment" : "data_timeline_treatment",
+    "data_timeline_tsh_labs" : "data_timeline_tsh_labs",
+    "data_timeline_tumor_sites" : "data_timeline_tumor_sites",
+    "msk_tempo_data_cna_hg19" : "msk_tempo_data_cna_hg19",
 }
 
 func NewDatabricksService(token, hostname, httpPath, catalog, schema string, port int) (*DatabricksService, func(), error) {
@@ -68,7 +93,9 @@ func (d *DatabricksService) GetTableColumns(tableName string) ([]string, error) 
 
 func (d *DatabricksService) WriteMetaData(tableName string, outDir string) error {
     // Construct query with % in LIKE
-    query := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE data_filename LIKE '%s%%'", d.catalog, d.schema, "metadata", tableName)
+    fmt.Println("wow here I am")
+    query := fmt.Sprintf("SELECT * FROM %s.%s.%s WHERE data_filename LIKE '%s.%%'", d.catalog, d.schema, "metadata", tableName)
+    fmt.Println(query)
     rows, err := d.db.Query(query)
     if err != nil {
         return fmt.Errorf("Failed to get data: '%s', %q", tableName, err)
@@ -137,6 +164,8 @@ func (d *DatabricksService) WriteMetaData(tableName string, outDir string) error
 
 // reading and writing at same time will save on memory and be faster
 func (d *DatabricksService) WriteAllTableData(tableName string, outDir string) (error) {
+    fmt.Println("HERE I AM")
+    fmt.Println(tableName)
     query := fmt.Sprintf("SELECT * FROM %s.%s.%s", d.catalog, d.schema, tableName)
     rows, err := d.db.Query(query)
     if err != nil {

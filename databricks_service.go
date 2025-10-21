@@ -48,6 +48,7 @@ var supportedFiletypes = map[string]string {
     "data_timeline_tsh_labs" : "data_timeline_tsh_labs",
     "data_timeline_tumor_sites" : "data_timeline_tumor_sites",
     "msk_tempo_data_cna_hg19" : "msk_tempo_data_cna_hg19",
+    "data_cna_transposed" : "data_CNA",
 }
 
 func NewDatabricksService(token, hostname, httpPath, catalog, schema string, port int) (*DatabricksService, func(), error) {
@@ -174,12 +175,12 @@ func (d *DatabricksService) WriteAllTableData(tableName string, outDir string) (
     }
     defer rows.Close()
 
-	// Create the directory and any necessary parent directories
-	err = os.MkdirAll(outDir, 0755)
-	if err != nil {
-		errReturn := fmt.Errorf("Error creating directory: %v\n", err)
-		return errReturn
-	}
+    // Create the directory and any necessary parent directories
+    err = os.MkdirAll(outDir, 0755)
+    if err != nil {
+	errReturn := fmt.Errorf("Error creating directory: %v\n", err)
+	return errReturn
+    }
     // TODO what if supportedFiletypes[tableName] is not found
     var outFilePath = filepath.Join(outDir, supportedFiletypes[tableName])
     file, err := os.Create(outFilePath)
@@ -225,6 +226,105 @@ func (d *DatabricksService) WriteAllTableData(tableName string, outDir string) (
         }
         writer.Write(record)
     }
+    return nil
+}
+
+// WriteTransposedTableData reads a table and writes it transposed (columns become rows, rows become columns)
+// This is memory-efficient for tables with many columns but loads all rows into memory
+func (d *DatabricksService) WriteTransposedTableData(tableName string, outDir string) error {
+    fmt.Println("Writing transposed table:", tableName)
+    query := fmt.Sprintf("SELECT * FROM %s.%s.%s", d.catalog, d.schema, tableName)
+    rows, err := d.db.Query(query)
+    if err != nil {
+        return fmt.Errorf("Failed to get data: '%s', %q", tableName, err)
+    }
+    defer rows.Close()
+
+    // Get column names
+    columns, err := rows.Columns()
+    if err != nil {
+        return fmt.Errorf("Failed to get columns: %q", err)
+    }
+
+    // Read all data into memory
+    // data[rowIndex][colIndex]
+    var data [][]string
+    values := make([]interface{}, len(columns))
+    valuePtrs := make([]interface{}, len(columns))
+    for i := range values {
+        valuePtrs[i] = &values[i]
+    }
+
+    for rows.Next() {
+        err := rows.Scan(valuePtrs...)
+        if err != nil {
+            return fmt.Errorf("Failed to scan row: %q", err)
+        }
+
+        // Convert []interface{} to []string
+        record := make([]string, len(values))
+        for i, val := range values {
+            if val != nil {
+                record[i] = fmt.Sprintf("%v", val)
+            } else {
+                record[i] = ""
+            }
+        }
+        data = append(data, record)
+    }
+
+    if err := rows.Err(); err != nil {
+        return fmt.Errorf("Error iterating rows: %q", err)
+    }
+
+    // Create output directory
+    err = os.MkdirAll(outDir, 0755)
+    if err != nil {
+        return fmt.Errorf("Error creating directory: %v", err)
+    }
+
+    // Get output file path
+    outFilePath := filepath.Join(outDir, supportedFiletypes[tableName])
+    file, err := os.Create(outFilePath)
+    if err != nil {
+        return fmt.Errorf("Failed to create file: '%s', %q", outFilePath, err)
+    }
+    defer file.Close()
+
+    writer := csv.NewWriter(file)
+    writer.Comma = '\t'
+    defer writer.Flush()
+
+    // Transpose and write
+    // Original: columns are headers, then rows of data
+    // Transposed: first column is original column names, then each original row becomes a column
+
+    numCols := len(columns)
+    numRows := len(data)
+
+    // Write transposed data
+    // Each original column becomes a row
+    for colIdx := 0; colIdx < numCols; colIdx++ {
+        transposedRow := make([]string, numRows+1)
+
+        // First cell is the column name
+        // For CNA files, replace first column header with "Hugo_Symbol"
+        if colIdx == 0 && tableName == "data_cna_transposed" {
+            transposedRow[0] = "Hugo_Symbol"
+        } else {
+            transposedRow[0] = columns[colIdx]
+        }
+
+        // Fill in values from each row's column
+        for rowIdx := 0; rowIdx < numRows; rowIdx++ {
+            transposedRow[rowIdx+1] = data[rowIdx][colIdx]
+        }
+
+        if err := writer.Write(transposedRow); err != nil {
+            return fmt.Errorf("Failed to write transposed row: %q", err)
+        }
+    }
+
     return nil
 }
 

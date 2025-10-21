@@ -53,8 +53,14 @@ func main() {
 
     handleIfError(err, "Error getting list of valid tables in schema")
     for _, table := range tables {
-        err = ds.WriteAllTableData(table, config.Directory)
-        handleIfError(err, fmt.Sprintf("Error writing table data for '%s'", table))
+        // Use transpose function for data_cna_transposed table
+        if table == "data_cna_transposed" {
+            err = ds.WriteTransposedTableData(table, config.Directory)
+            handleIfError(err, fmt.Sprintf("Error writing transposed table data for '%s'", table))
+        } else {
+            err = ds.WriteAllTableData(table, config.Directory)
+            handleIfError(err, fmt.Sprintf("Error writing table data for '%s'", table))
+        }
         err = ds.WriteMetaData(table, config.Directory)
         handleIfError(err, fmt.Sprintf("Error writing metadata data for '%s'", table))
     }

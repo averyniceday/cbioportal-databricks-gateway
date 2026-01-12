@@ -49,6 +49,7 @@ var supportedFiletypes = map[string]string {
     "data_timeline_tumor_sites" : "data_timeline_tumor_sites",
     "msk_tempo_data_cna_hg19" : "msk_tempo_data_cna_hg19",
     "data_cna_transposed" : "data_CNA",
+    "data_cna" : "data_CNA",
 }
 
 func NewDatabricksService(token, hostname, httpPath, catalog, schema string, port int) (*DatabricksService, func(), error) {
@@ -322,6 +323,119 @@ func (d *DatabricksService) WriteTransposedTableData(tableName string, outDir st
 
         if err := writer.Write(transposedRow); err != nil {
             return fmt.Errorf("Failed to write transposed row: %q", err)
+        }
+    }
+
+    return nil
+}
+
+// WritePivotedCNAData reads a table with three columns (sample_id, gene, cna_value)
+// and writes it pivoted into cbioportal CNA format where genes are rows and samples are columns
+func (d *DatabricksService) WritePivotedCNAData(tableName string, outDir string) error {
+    fmt.Println("Writing pivoted CNA table:", tableName)
+    query := fmt.Sprintf("SELECT * FROM %s.%s.%s", d.catalog, d.schema, tableName)
+    rows, err := d.db.Query(query)
+    if err != nil {
+        return fmt.Errorf("Failed to get data: '%s', %q", tableName, err)
+    }
+    defer rows.Close()
+
+    // Get column names to verify it's a three-column format
+    columns, err := rows.Columns()
+    if err != nil {
+        return fmt.Errorf("Failed to get columns: %q", err)
+    }
+
+    if len(columns) != 3 {
+        return fmt.Errorf("Expected 3 columns (sample_id, gene, cna_value), got %d columns", len(columns))
+    }
+
+    // Maps to store unique samples and genes, and the data
+    // geneData[gene][sample] = cna_value
+    geneData := make(map[string]map[string]string)
+    var samples []string
+    sampleSet := make(map[string]bool)
+
+    // Read all data
+    values := make([]interface{}, 3)
+    valuePtrs := make([]interface{}, 3)
+    for i := range values {
+        valuePtrs[i] = &values[i]
+    }
+
+    for rows.Next() {
+        err := rows.Scan(valuePtrs...)
+        if err != nil {
+            return fmt.Errorf("Failed to scan row: %q", err)
+        }
+
+        // Extract sample_id, gene, and cna_value
+        sampleID := fmt.Sprintf("%v", values[0])
+        gene := fmt.Sprintf("%v", values[1])
+        cnaValue := fmt.Sprintf("%v", values[2])
+
+        // Track unique samples in order
+        if !sampleSet[sampleID] {
+            samples = append(samples, sampleID)
+            sampleSet[sampleID] = true
+        }
+
+        // Initialize gene map if needed
+        if geneData[gene] == nil {
+            geneData[gene] = make(map[string]string)
+        }
+
+        // Store the CNA value
+        geneData[gene][sampleID] = cnaValue
+    }
+
+    if err := rows.Err(); err != nil {
+        return fmt.Errorf("Error iterating rows: %q", err)
+    }
+
+    // Create output directory
+    err = os.MkdirAll(outDir, 0755)
+    if err != nil {
+        return fmt.Errorf("Error creating directory: %v", err)
+    }
+
+    // Get output file path
+    outFilePath := filepath.Join(outDir, supportedFiletypes[tableName])
+    file, err := os.Create(outFilePath)
+    if err != nil {
+        return fmt.Errorf("Failed to create file: '%s', %q", outFilePath, err)
+    }
+    defer file.Close()
+
+    writer := csv.NewWriter(file)
+    writer.Comma = '\t'
+    defer writer.Flush()
+
+    // Write header row: Hugo_Symbol followed by sample IDs
+    header := make([]string, len(samples)+1)
+    header[0] = "Hugo_Symbol"
+    copy(header[1:], samples)
+    if err := writer.Write(header); err != nil {
+        return fmt.Errorf("Failed to write header: %q", err)
+    }
+
+    // Write each gene as a row
+    for gene, sampleValues := range geneData {
+        row := make([]string, len(samples)+1)
+        row[0] = gene
+
+        // Fill in CNA values for each sample
+        for i, sample := range samples {
+            if val, ok := sampleValues[sample]; ok {
+                row[i+1] = val
+            } else {
+                // If no value for this gene-sample combination, use "0"
+                row[i+1] = "0"
+            }
+        }
+
+        if err := writer.Write(row); err != nil {
+            return fmt.Errorf("Failed to write row for gene %s: %q", gene, err)
         }
     }
 

@@ -57,6 +57,10 @@ func main() {
         if table == "data_cna_transposed" {
             err = ds.WriteTransposedTableData(table, config.Directory)
             handleIfError(err, fmt.Sprintf("Error writing transposed table data for '%s'", table))
+        } else if table == "data_cna" {
+            // Use pivot function for three-column CNA format (sample_id, gene, cna_value)
+            err = ds.WritePivotedCNAData(table, config.Directory)
+            handleIfError(err, fmt.Sprintf("Error writing pivoted CNA data for '%s'", table))
         } else {
             err = ds.WriteAllTableData(table, config.Directory)
             handleIfError(err, fmt.Sprintf("Error writing table data for '%s'", table))

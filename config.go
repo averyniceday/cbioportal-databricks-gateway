@@ -8,5 +8,6 @@ type Config struct {
 	Catalog            string  `docopt:"--catalog"`
 	Schema             string  `docopt:"--schema"`
 	Directory          string  `docopt:"--directory"`
+	Filetypes          string  `docopt:"--filetypes"`
 }
 

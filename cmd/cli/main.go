@@ -3,6 +3,7 @@ package main
 import (
     "log"
     "fmt"
+    "strings"
     cdg "github.com/averyniceday/cbioportal-databricks-gateway"
     "github.com/docopt/docopt-go"
 )
@@ -19,6 +20,7 @@ Usage:
                 --path=<path>
                 --port=<port>
                 --directory=<directory>
+                [--filetypes=<filetypes>]
 
 Options:
   -h --help                           Show this screen.
@@ -29,6 +31,7 @@ Options:
   --catalog=<catalog>                 The catalog to query for a given schema
   --schema=<schema>                   The schema to query (represents a cBioPortal study)
   --directory=<directory>             The directory to write generated cBioPortal files out to
+  --filetypes=<filetypes>             Optional comma-separated list of table names to export (e.g., data_clinical_patient,data_clinical_sample)
 `
 
 func handleIfError(err error, message string) {
@@ -49,14 +52,34 @@ func main() {
     handleIfError(err, "Error connecting to the database")
 
     tables, err := ds.GetValidTablesInSchema()
-    fmt.Println(tables)
-
     handleIfError(err, "Error getting list of valid tables in schema")
+
+    // Filter tables if --filetypes is provided
+    if config.Filetypes != "" {
+        requestedTypes := strings.Split(config.Filetypes, ",")
+        requestedSet := make(map[string]bool)
+        for _, ft := range requestedTypes {
+            requestedSet[strings.TrimSpace(ft)] = true
+        }
+        var filteredTables []string
+        for _, table := range tables {
+            if requestedSet[table] {
+                filteredTables = append(filteredTables, table)
+            }
+        }
+        tables = filteredTables
+    }
+
+    fmt.Println(tables)
     for _, table := range tables {
         // Use transpose function for data_cna_transposed table
         if table == "data_cna_transposed" {
             err = ds.WriteTransposedTableData(table, config.Directory)
             handleIfError(err, fmt.Sprintf("Error writing transposed table data for '%s'", table))
+        } else if table == "data_cna" {
+            // Use pivot function for three-column CNA format (sample_id, gene, cna_value)
+            err = ds.WritePivotedCNAData(table, config.Directory)
+            handleIfError(err, fmt.Sprintf("Error writing pivoted CNA data for '%s'", table))
         } else {
             err = ds.WriteAllTableData(table, config.Directory)
             handleIfError(err, fmt.Sprintf("Error writing table data for '%s'", table))
